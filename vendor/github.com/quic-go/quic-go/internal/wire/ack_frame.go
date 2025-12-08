@@ -2,11 +2,11 @@ package wire
 
 import (
 	"errors"
+	"math"
 	"sort"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -21,9 +21,9 @@ type AckFrame struct {
 }
 
 // parseAckFrame reads an ACK frame
-func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8, _ protocol.Version) (int, error) {
+func parseAckFrame(frame *AckFrame, b []byte, typ FrameType, ackDelayExponent uint8, _ protocol.Version) (int, error) {
 	startLen := len(b)
-	ecn := typ == ackECNFrameType
+	ecn := typ == FrameTypeAckECN
 
 	la, l, err := quicvarint.Parse(b)
 	if err != nil {
@@ -40,7 +40,7 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 	delayTime := time.Duration(delay*1<<ackDelayExponent) * time.Microsecond
 	if delayTime < 0 {
 		// If the delay time overflows, set it to the maximum encode-able value.
-		delayTime = utils.InfDuration
+		delayTime = time.Duration(math.MaxInt64)
 	}
 	frame.DelayTime = delayTime
 
@@ -122,9 +122,9 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 func (f *AckFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	hasECN := f.ECT0 > 0 || f.ECT1 > 0 || f.ECNCE > 0
 	if hasECN {
-		b = append(b, ackECNFrameType)
+		b = append(b, byte(FrameTypeAckECN))
 	} else {
-		b = append(b, ackFrameType)
+		b = append(b, byte(FrameTypeAck))
 	}
 	b = quicvarint.Append(b, uint64(f.LargestAcked()))
 	b = quicvarint.Append(b, encodeAckDelay(f.DelayTime))
